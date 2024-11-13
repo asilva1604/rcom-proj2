@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define MAX_STR_SIZE 256
 
@@ -71,7 +74,7 @@ int main (int argc, char **argv) {
         ++counter;
         ++hcounter;
     }
-    
+
     ++counter;
     int pathcounter = 0;
     while (url[counter] != '\0') {
@@ -82,6 +85,18 @@ int main (int argc, char **argv) {
 
     printf("%s\n", host);
     printf("%s\n", path);
+
+    struct hostent *h;
+
+    if ((h=gethostbyname(host)) == NULL) {
+        puts("Could not get host by name...");
+        exit(1);
+    }
+
+    char *ip_address = inet_ntoa(*((struct in_addr *) h->h_addr));
+
+    printf("Host Name : %s\n", h->h_name);
+    printf("IP Address : %s\n", ip_address);
 
     return(1);
 }
