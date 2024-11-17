@@ -9,13 +9,14 @@
 
 int main (int argc, char **argv) {
     if (argc == 1) {
-        puts("Welcome to our FTP client. Supply the url.");
+        puts("Welcome to our FTP client. Please supply the url.");
         return(0);
     }
     if (argc > 2) {
         puts("No need to supply more than 1 argument. Just the URL is fine :)");
         return(0);
     }
+    // ftp://[<user>:<password>@]<host>/<url-path>
 
     char url[MAX_STR_SIZE];
     
@@ -45,18 +46,23 @@ int main (int argc, char **argv) {
 
     if (strchr(url, '@')) {
         while (url[counter] != ':') {
+            if (counter >= strlen(url)) {
+                puts("Bad url format: missing ':' between user and password.\nThe url must be ftp://[<user>:<password>@]<host>/<url-path>");
+                return(0);
+            }
             user[counter - 6] = url[counter];
-            ++counter;
+            counter++;
         }
         user[counter - 6] = '\0';
-        ++counter;
+        counter++;
         int pcounter = 0;
         while (url[counter] != '@') {
             passw[pcounter] = url[counter];
-            ++counter;
-            ++pcounter;
+            counter++;
+            pcounter++;
         }
         passw[pcounter] = '\0';
+        counter++;
     } else {
         strcpy(user, "anonymous");
         strcpy(passw, "anonymous");
@@ -64,12 +70,16 @@ int main (int argc, char **argv) {
 
     //WE HAVE USER AND PASSWORD
 
-    printf("%s\n", (char *)&user);
-    printf("%s\n", (char *)&passw);
+    printf("User: %s\n", (char *)&user);
+    printf("Password: %s\n", (char *)&passw);
 
     int hcounter = 0;
 
     while (url[counter] != '/') {
+        if (counter >= strlen(url)) {
+            puts("Bad url format: missing '/' between host and url-path.\nThe url must be ftp://[<user>:<password>@]<host>/<url-path>");
+            return(0);
+        }
         host[hcounter] = url[counter];
         ++counter;
         ++hcounter;
@@ -83,8 +93,8 @@ int main (int argc, char **argv) {
         ++counter;
     }
 
-    printf("%s\n", host);
-    printf("%s\n", path);
+    printf("Host: %s\n", host);
+    printf("Url-path: %s\n", path);
 
     struct hostent *h;
 
@@ -97,6 +107,8 @@ int main (int argc, char **argv) {
 
     printf("Host Name : %s\n", h->h_name);
     printf("IP Address : %s\n", ip_address);
+
+
 
     return(1);
 }
