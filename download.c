@@ -4,6 +4,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 #define MAX_STR_SIZE 256
 
@@ -107,6 +108,39 @@ int main (int argc, char **argv) {
 
     printf("Host Name : %s\n", h->h_name);
     printf("IP Address : %s\n", ip_address);
+    
+    int sockfd1;
+    struct sockaddr_in server_addr;
+
+    bzero((char *) &server_addr, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(ip_address);
+    server_addr.sin_port = htons(21);
+
+    if ((sockfd1 = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("socket()");
+        exit(-1);
+    }
+    if (connect(sockfd1, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+        perror("connect()");
+        exit(-1);
+    }
+
+    // Buffer to store received data
+    char buffer[1024];
+    int bytes_received;
+
+    // Loop to continuously read data from the socket
+    while ((bytes_received = recv(sockfd1, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0'; // Null-terminate the received data
+        printf("%s", buffer); // Print the received data
+    }
+
+    if (bytes_received < 0) {
+        perror("recv()");
+    }
+
+    close(sockfd1);
 
 
 
