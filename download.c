@@ -6,7 +6,50 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#define MAX_STR_SIZE 256
+#define MAX_STR_SIZE 1024
+
+int is_response_code_line(const char *line) {
+    // Check if the line is a response code followed by a space
+    return strlen(line) >= 4 && isdigit(line[0]) && isdigit(line[1]) && isdigit(line[2]) && line[3] == ' ';
+}
+
+void parse_227_response(const char *line, char *ip_address, int *port) {
+    int ip1, ip2, ip3, ip4, p1, p2;
+    sscanf(line, "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
+    sprintf(ip_address, "%d.%d.%d.%d", ip1, ip2, ip3, ip4);
+    *port = (p1 * 256) + p2;
+}
+
+int read_response(int sockfd, char *ip_address, int *port) {
+    char buffer[1024];
+    int bytes_received;
+    int response_code = 0;
+
+    // Loop to continuously read data from the socket
+    while ((bytes_received = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0'; // Null-terminate the received data
+        printf("%s", buffer); // Print the received data
+
+        // Check if the buffer contains a response code line
+        char *line = strtok(buffer, "\r\n");
+        while (line != NULL) {
+            if (is_response_code_line(line)) {
+                response_code = atoi(line); // Convert response code to integer
+                if (response_code == 227) {
+                    parse_227_response(line, ip_address, port);
+                }
+                return response_code;
+            }
+            line = strtok(NULL, "\r\n");
+        }
+    }
+
+    if (bytes_received < 0) {
+        perror("recv()");
+    }
+
+    return response_code;
+}
 
 int main (int argc, char **argv) {
     if (argc == 1) {
@@ -126,23 +169,128 @@ int main (int argc, char **argv) {
         exit(-1);
     }
 
-    // Buffer to store received data
+    char passive_ip[16];
+    int passive_port;
     char buffer[1024];
     int bytes_received;
+    int welcome_message_received = 0;
 
-    // Loop to continuously read data from the socket
-    while ((bytes_received = recv(sockfd1, buffer, sizeof(buffer) - 1, 0)) > 0) {
-        buffer[bytes_received] = '\0'; // Null-terminate the received data
-        printf("%s", buffer); // Print the received data
+    int response_code = read_response(sockfd1, passive_ip, &passive_port);
+    if (response_code != 220) {
+        printf("Expected response code 220, but got %d\n", response_code);
+        exit(-1);
+    }
+
+    //send a USER command with our username variable
+    char cmd[MAX_STR_SIZE];
+    sprintf(cmd, "USER %s\r\n", user);
+    int bytes = write(sockfd1, cmd, strlen(cmd));
+    if (bytes < 0) {
+        perror("write()");
+        exit(-1);
+    }
+
+    printf("Wrote: %s\n", cmd);
+
+    response_code = read_response(sockfd1, passive_ip, &passive_port);
+    if (response_code != 331) {
+        printf("Expected response code 331, but got %d\n", response_code);
+        exit(-1);
+    }
+
+    //send a PASS command with our password variable
+    sprintf(cmd, "PASS %s\r\n", passw);
+    bytes = write(sockfd1, cmd, strlen(cmd));
+    if (bytes < 0) {
+        perror("write()");
+        exit(-1);
+    }
+
+    printf("Wrote: %s\n", cmd);
+
+    response_code = read_response(sockfd1, passive_ip, &passive_port);
+    if (response_code != 230) {
+        printf("Expected response code 230, but got %d\n", response_code);
+        exit(-1);
+    }
+
+    sprintf(cmd, "PASV\r\n");
+    bytes = write(sockfd1, cmd, strlen(cmd));
+    if (bytes < 0) {
+        perror("write()");
+        exit(-1);
+    }
+
+    printf("Wrote: %s\n", cmd);
+
+    response_code = read_response(sockfd1, passive_ip, &passive_port);
+    if (response_code != 227) {
+        printf("Expected response code 227, but got %d\n", response_code);
+        exit(-1);
+    }
+
+    printf("Passive IP: %s\n", passive_ip);
+    printf("Passive Port: %d\n", passive_port);
+
+    struct sockaddr_in server_addr2;
+    int sockfd2;
+
+    bzero((char *) &server_addr2, sizeof(server_addr2));
+    server_addr2.sin_family = AF_INET;
+    server_addr2.sin_addr.s_addr = inet_addr(passive_ip);
+    server_addr2.sin_port = htons(passive_port);
+
+    if ((sockfd2 = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("socket()");
+        exit(-1);
+    }
+
+    if (connect(sockfd2, (struct sockaddr *) &server_addr2, sizeof(server_addr2)) < 0) {
+        perror("connect()");
+        exit(-1);
+    }
+
+    sprintf(cmd, "RETR %s\r\n", path);
+    bytes = write(sockfd1, cmd, strlen(cmd));
+    if (bytes < 0) {
+        perror("write()");
+        exit(-1);
+    }
+
+    printf("Wrote: %s\n", cmd);
+
+    response_code = read_response(sockfd1, passive_ip, &passive_port);
+    if (response_code != 150) {
+        printf("Expected response code 150, but got %d\n", response_code);
+        exit(-1);
+    }
+
+    // Extract the filename from the path
+    char *filename = strrchr(path, '/');
+    if (filename != NULL) {
+        filename++; // Move past the '/'
+    } else {
+        filename = path; // No '/' found, use the whole path as the filename
+    }
+    
+    FILE *file = fopen(filename, "wb");
+    if (file == NULL) {
+        perror("fopen()");
+        exit(-1);
+    }
+
+    while ((bytes_received = recv(sockfd2, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0';
+        fwrite(buffer, 1, bytes_received, file);
     }
 
     if (bytes_received < 0) {
         perror("recv()");
     }
 
+    fclose(file);
+    
     close(sockfd1);
-
-
 
     return(1);
 }
