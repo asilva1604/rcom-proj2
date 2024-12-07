@@ -260,7 +260,7 @@ int main (int argc, char **argv) {
     printf("Wrote: %s\n", cmd);
 
     response_code = read_response(sockfd1, passive_ip, &passive_port);
-    if (response_code != 150) {
+    if (response_code != 150 && response_code != 125) {
         printf("Expected response code 150, but got %d\n", response_code);
         exit(-1);
     }
