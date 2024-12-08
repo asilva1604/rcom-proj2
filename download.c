@@ -7,6 +7,8 @@
 #include <unistd.h>
 
 #define MAX_STR_SIZE 1024
+#define MAX_CMD_SIZE 1032
+#define SERVER_PORT 21
 
 int is_response_code_line(const char *line) {
     // Check if the line is a response code followed by a space
@@ -53,14 +55,13 @@ int read_response(int sockfd, char *ip_address, int *port) {
 
 int main (int argc, char **argv) {
     if (argc == 1) {
-        puts("Welcome to our FTP client. Please supply the url.");
+        puts("Welcome to our FTP client. Please supply the url of type: \"ftp://[<user>:<password>@]<host>/<url-path>\".");
         return(0);
     }
     if (argc > 2) {
         puts("No need to supply more than 1 argument. Just the URL is fine :)");
         return(0);
     }
-    // ftp://[<user>:<password>@]<host>/<url-path>
 
     char url[MAX_STR_SIZE];
     
@@ -143,7 +144,7 @@ int main (int argc, char **argv) {
     struct hostent *h;
 
     if ((h=gethostbyname(host)) == NULL) {
-        puts("Could not get host by name...");
+        printf("Could not get host by name of %s", host);
         exit(1);
     }
 
@@ -158,7 +159,7 @@ int main (int argc, char **argv) {
     bzero((char *) &server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(ip_address);
-    server_addr.sin_port = htons(21);
+    server_addr.sin_port = htons(SERVER_PORT);
 
     if ((sockfd1 = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket()");
@@ -182,7 +183,7 @@ int main (int argc, char **argv) {
     }
 
     //send a USER command with our username variable
-    char cmd[MAX_STR_SIZE];
+    char cmd[MAX_CMD_SIZE];
     sprintf(cmd, "USER %s\r\n", user);
     int bytes = write(sockfd1, cmd, strlen(cmd));
     if (bytes < 0) {
@@ -261,7 +262,7 @@ int main (int argc, char **argv) {
 
     response_code = read_response(sockfd1, passive_ip, &passive_port);
     if (response_code != 150 && response_code != 125) {
-        printf("Expected response code 150, but got %d\n", response_code);
+        printf("Expected response code 150, but got %d\nPossibly the <url-path> doesn't exist.\n", response_code);
         exit(-1);
     }
 
@@ -272,7 +273,7 @@ int main (int argc, char **argv) {
     } else {
         filename = path; // No '/' found, use the whole path as the filename
     }
-    
+
     FILE *file = fopen(filename, "wb");
     if (file == NULL) {
         perror("fopen()");
@@ -289,8 +290,39 @@ int main (int argc, char **argv) {
     }
 
     fclose(file);
+
+    response_code = read_response(sockfd1, passive_ip, &passive_port);
+    if (response_code != 226) {
+        printf("Expected response code 226, but got %d\n", response_code);
+        exit(-1);
+    }
+
+    if (close(sockfd2) < 0) {
+        perror("close()");
+        exit(-1);
+    }
+
+    sprintf(cmd, "QUIT\r\n");
+    bytes = write(sockfd1, cmd, strlen(cmd));
+    if (bytes < 0) {
+        perror("write()");
+        exit(-1);
+    }
     
-    close(sockfd1);
+    printf("Wrote: %s\n", cmd);
+
+    response_code = read_response(sockfd1, passive_ip, &passive_port);
+    if (response_code != 221) {
+        printf("Expected response code 221, but got %d\n", response_code);
+        exit(-1);
+    }
+
+    printf("\nSuccessfully downloaded %s and closed control connection.\n", filename);
+
+    if (close(sockfd1) < 0) {
+        perror("close()");
+        exit(-1);
+    }
 
     return(1);
 }
