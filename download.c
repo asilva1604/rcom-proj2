@@ -10,14 +10,9 @@
 #define MAX_CMD_SIZE 1032
 #define SERVER_PORT 21
 
-int is_response_code_line(const char *line) {
-    // Check if the line is a response code followed by a space
-    return strlen(line) >= 4 && isdigit(line[0]) && isdigit(line[1]) && isdigit(line[2]) && line[3] == ' ';
-}
-
 void parse_227_response(const char *line, char *ip_address, int *port) {
     int ip1, ip2, ip3, ip4, p1, p2;
-    sscanf(line, "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
+    sscanf(line, "Entering Passive Mode (%d,%d,%d,%d,%d,%d)", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
     sprintf(ip_address, "%d.%d.%d.%d", ip1, ip2, ip3, ip4);
     *port = (p1 * 256) + p2;
 }
@@ -26,23 +21,28 @@ int read_response(int sockfd, char *ip_address, int *port) {
     char buffer[1024];
     int bytes_received;
     int response_code = 0;
+    char code[4];
+    int code_len = 0;
 
     // Loop to continuously read data from the socket
     while ((bytes_received = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) > 0) {
         buffer[bytes_received] = '\0'; // Null-terminate the received data
         printf("%s", buffer); // Print the received data
 
-        // Check if the buffer contains a response code line
-        char *line = strtok(buffer, "\r\n");
-        while (line != NULL) {
-            if (is_response_code_line(line)) {
-                response_code = atoi(line); // Convert response code to integer
+        for (size_t i = 0; i < bytes_received; i++) {
+            if (code_len < 3 && isdigit(buffer[i])) {
+                code[code_len] = buffer[i];
+                code_len++;
+            }
+            else if (code_len == 3 && buffer[i] == ' ') {
+                //got the code
+                response_code = ((code[0] - '0') * 100) + ((code[1] - '0') * 10) + (code[2] - '0');
                 if (response_code == 227) {
-                    parse_227_response(line, ip_address, port);
+                    parse_227_response(&buffer[i + 1], ip_address, port);
                 }
                 return response_code;
             }
-            line = strtok(NULL, "\r\n");
+            else code_len = 0;
         }
     }
 
