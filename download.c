@@ -289,16 +289,16 @@ int main (int argc, char **argv) {
         perror("recv()");
     }
 
+    if (close(sockfd2) < 0) {
+        perror("close()");
+        exit(-1);
+    }
+
     fclose(file);
 
     response_code = read_response(sockfd1, passive_ip, &passive_port);
     if (response_code != 226) {
         printf("Expected response code 226, but got %d\n", response_code);
-        exit(-1);
-    }
-
-    if (close(sockfd2) < 0) {
-        perror("close()");
         exit(-1);
     }
 
