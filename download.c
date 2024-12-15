@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #define MAX_STR_SIZE 1024
 #define MAX_CMD_SIZE 1032
@@ -22,7 +23,7 @@ int read_response(int sockfd, char *ip_address, int *port) {
     int bytes_received;
     int response_code = 0;
     char code[4];
-    int code_len = 0;
+    int code_len = 2;
 
     // Loop to continuously read data from the socket
     while ((bytes_received = recv(sockfd, buffer, sizeof(buffer) - 1, 0)) > 0) {
@@ -30,11 +31,14 @@ int read_response(int sockfd, char *ip_address, int *port) {
         printf("%s", buffer); // Print the received data
 
         for (size_t i = 0; i < bytes_received; i++) {
-            if (code_len < 3 && isdigit(buffer[i])) {
-                code[code_len] = buffer[i];
+            if ((code_len == 0 && buffer[i] == '\r') || (code_len == 1 && buffer[i] == '\n')) {
                 code_len++;
             }
-            else if (code_len == 3 && buffer[i] == ' ') {
+            else if (code_len < 5 && isdigit(buffer[i])) {
+                code[code_len - 2] = buffer[i];
+                code_len++;
+            }
+            else if (code_len == 5 && buffer[i] == ' ') {
                 //got the code
                 response_code = ((code[0] - '0') * 100) + ((code[1] - '0') * 10) + (code[2] - '0');
                 if (response_code == 227) {
